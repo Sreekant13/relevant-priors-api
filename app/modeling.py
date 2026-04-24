@@ -78,6 +78,99 @@ def _body_region_one(x: str) -> str:
 def _get_body_region(s: pd.Series) -> np.ndarray:
     return np.array([_body_region_one(x) for x in s])
 
+def _contrast_status_one(x: str) -> str:
+    x = (x or "").strip().upper()
+
+    # Normalize common variants.
+    x = x.replace("CNTRST", "CONTRAST")
+    x = x.replace("C+", "CONTRAST")
+    x = x.replace("W/O", "WITHOUT")
+    x = x.replace("W/WO", "WITH WITHOUT")
+    x = x.replace("W WO", "WITH WITHOUT")
+    x = x.replace("WO ", "WITHOUT ")
+
+    has_contrast_word = "CONTRAST" in x or "GAD" in x or "GADOLINIUM" in x
+
+    if "WITH WITHOUT" in x or "W AND WO" in x or "WITH AND WITHOUT" in x:
+        return "WITH_WITHOUT"
+    if "WITHOUT CONTRAST" in x or "NO CONTRAST" in x or "NONCONTRAST" in x:
+        return "WITHOUT"
+    if "WITH CONTRAST" in x or (" CONTRAST" in x and "WITHOUT" not in x):
+        return "WITH"
+    if has_contrast_word:
+        return "CONTRAST_UNKNOWN"
+
+    return "UNKNOWN"
+
+
+def _get_contrast_status(s: pd.Series) -> np.ndarray:
+    return np.array([_contrast_status_one(x) for x in s])
+
+
+def _angio_status_one(x: str) -> str:
+    x = (x or "").strip().upper()
+
+    if x.startswith("CTA") or " CTA " in f" {x} " or "CT ANGIO" in x or "CT ANGIOGRAPHY" in x:
+        return "CTA"
+    if x.startswith("MRA") or " MRA " in f" {x} " or "MR ANGIO" in x or "MR ANGIOGRAPHY" in x:
+        return "MRA"
+    if "ANGIO" in x or "ANGIOGRAM" in x or "ANGIOGRAPHY" in x:
+        return "ANGIO"
+    if "DOPPLER" in x or "DUPLEX" in x:
+        return "DOPPLER"
+
+    return "NONE"
+
+
+def _get_angio_status(s: pd.Series) -> np.ndarray:
+    return np.array([_angio_status_one(x) for x in s])
+
+
+def _laterality_one(x: str) -> str:
+    x = (x or "").strip().upper()
+
+    has_left = bool(re.search(r"\bLEFT\b|\bLT\b", x))
+    has_right = bool(re.search(r"\bRIGHT\b|\bRT\b", x))
+    has_bilateral = bool(re.search(r"\bBILATERAL\b|\bBILAT\b|\bBOTH\b", x))
+
+    if has_bilateral or (has_left and has_right):
+        return "BILATERAL"
+    if has_left:
+        return "LEFT"
+    if has_right:
+        return "RIGHT"
+
+    return "NONE"
+
+
+def _get_laterality(s: pd.Series) -> np.ndarray:
+    return np.array([_laterality_one(x) for x in s])
+
+
+def _is_limited_screening_one(x: str) -> float:
+    x = (x or "").strip().upper()
+    return float(
+        "LIMITED" in x
+        or "SCREEN" in x
+        or "SCREENING" in x
+        or "SURVEY" in x
+        or "FOLLOW UP" in x
+        or "F/U" in x
+    )
+
+
+def _get_limited_screening(s: pd.Series) -> np.ndarray:
+    return np.array([_is_limited_screening_one(x) for x in s], dtype=float)
+
+
+def _is_portable_one(x: str) -> float:
+    x = (x or "").strip().upper()
+    return float("PORTABLE" in x or "PORT" in x)
+
+
+def _get_portable(s: pd.Series) -> np.ndarray:
+    return np.array([_is_portable_one(x) for x in s], dtype=float)
+
 def _jaccard(a: pd.Series, b: pd.Series) -> np.ndarray:
     out = []
     for x, y in zip(a, b):
@@ -138,13 +231,59 @@ def engineered_features(X: pd.DataFrame) -> np.ndarray:
     current_modality = _get_modality(current)
     prior_modality = _get_modality(prior)
 
+    #current_region = _get_body_region(current)
+    #prior_region = _get_body_region(prior)
+
+    #same_modality = (current_modality == prior_modality).astype(float)
+    #same_region = (current_region == prior_region).astype(float)
+    #known_same_region = ((current_region != "UNK") & (current_region == prior_region)).astype(float)
+    #same_modality_and_region = ((current_modality == prior_modality) & (current_region == prior_region)).astype(float)
+    
     current_region = _get_body_region(current)
     prior_region = _get_body_region(prior)
+
+    current_contrast = _get_contrast_status(current)
+    prior_contrast = _get_contrast_status(prior)
+
+    current_angio = _get_angio_status(current)
+    prior_angio = _get_angio_status(prior)
+
+    current_laterality = _get_laterality(current)
+    prior_laterality = _get_laterality(prior)
+
+    current_limited = _get_limited_screening(current)
+    prior_limited = _get_limited_screening(prior)
+
+    current_portable = _get_portable(current)
+    prior_portable = _get_portable(prior)
 
     same_modality = (current_modality == prior_modality).astype(float)
     same_region = (current_region == prior_region).astype(float)
     known_same_region = ((current_region != "UNK") & (current_region == prior_region)).astype(float)
     same_modality_and_region = ((current_modality == prior_modality) & (current_region == prior_region)).astype(float)
+
+    same_contrast_status = (current_contrast == prior_contrast).astype(float)
+    known_same_contrast_status = (
+        (current_contrast != "UNKNOWN") & (current_contrast == prior_contrast)
+    ).astype(float)
+
+    both_angio = ((current_angio != "NONE") & (prior_angio != "NONE")).astype(float)
+    same_angio_status = (current_angio == prior_angio).astype(float)
+    known_same_angio_status = (
+        (current_angio != "NONE") & (current_angio == prior_angio)
+    ).astype(float)
+
+    same_laterality = (current_laterality == prior_laterality).astype(float)
+    known_same_laterality = (
+        (current_laterality != "NONE") & (current_laterality == prior_laterality)
+    ).astype(float)
+    laterality_conflict = (
+        ((current_laterality == "LEFT") & (prior_laterality == "RIGHT"))
+        | ((current_laterality == "RIGHT") & (prior_laterality == "LEFT"))
+    ).astype(float)
+
+    same_limited_screening = (current_limited == prior_limited).astype(float)
+    same_portable_status = (current_portable == prior_portable).astype(float)
 
     # Case-level rank/recency features.
     prior_rank_by_recency = X["prior_rank_by_recency"].fillna(0).astype(float).to_numpy()
@@ -164,6 +303,16 @@ def engineered_features(X: pd.DataFrame) -> np.ndarray:
             same_region,
             known_same_region,
             same_modality_and_region,
+            same_contrast_status,
+            known_same_contrast_status,
+            both_angio,
+            same_angio_status,
+            known_same_angio_status,
+            same_laterality,
+            known_same_laterality,
+            laterality_conflict,
+            same_limited_screening,
+            same_portable_status,
             _jaccard(current, prior),
             _intersection_count(current, prior),
             days / 3650.0,
