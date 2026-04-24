@@ -1,0 +1,23 @@
+{
+  "challenge_id": "relevant-priors-v1",
+  "schema_version": 1,
+  "cases": [
+    {
+      "patient_id": "600218",
+      "patient_name": "Richards, Natalie",
+      "current_study": {
+        "study_id": "1489859",
+        "study_description": "NM myo perf SPECT rest & str",
+        "study_date": "2022-11-07"
+      },
+      "prior_studies": [
+        {
+          "study_id": "1097570",
+          "study_description": "CT coronary calc screening",
+          "study_date": "2021-07-17"
+        }
+      ],
+      "case_id": "1489859"
+    }
+  ]
+}
