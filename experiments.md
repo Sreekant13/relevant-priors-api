@@ -157,3 +157,27 @@ Results:
 - Public smoke-test accuracy improved from `97.69%` to `98.27%`
 
 The final selected model uses word TF-IDF, character n-gram TF-IDF, engineered modality/body-region features, and case-level rank/recency features. I selected this version because it preserved grouped validation accuracy while improving recall/F1 balance and achieving the best public smoke-test score.
+
+## Contrast and Procedure Compatibility Experiment
+
+I added contrast/procedure compatibility features to capture differences such as `WITH CONTRAST`, `WITHOUT CONTRAST`, `W WO CONTRAST`, `CTA`, `MRA`, portable exams, limited/screening exams, and laterality.
+
+New features included:
+- Same contrast status
+- Known same contrast status
+- Both exams angiographic
+- Same angiographic status
+- Same laterality
+- Known same laterality
+- Left/right laterality conflict
+- Same limited/screening status
+- Same portable status
+
+Results:
+- Previous best body-region + rank/recency model validation accuracy: `0.9402`
+- Contrast/procedure feature model validation accuracy: `0.9434`
+- Best threshold: `0.59`
+- Validation confusion matrix: `[[4464, 60], [279, 1187]]`
+- Public smoke-test accuracy remained `98.27%`
+
+I kept this version because it improved grouped validation accuracy while preserving the best public smoke-test score.
