@@ -64,3 +64,22 @@ Given more time, I would add:
 3. Calibration by modality and body region, since relevance rules differ for chest CT, brain MRI, mammography, and x-ray follow-ups.
 4. A small gradient boosted tree or ensemble combining the text model with engineered clinical features.
 5. Error analysis on false negatives, because skipped relevant priors are costly in the challenge scoring.
+
+## Final Model Update
+
+After the initial baseline, I added character n-gram TF-IDF features in addition to word-level TF-IDF and engineered metadata features. This helped the model handle abbreviation and spelling variations in radiology study descriptions, such as `CNTRST` versus `CONTRAST`, and `WO` versus `WITHOUT`.
+
+The final selected model uses:
+- Word TF-IDF n-grams: 1 to 3
+- Character TF-IDF n-grams: 3 to 5
+- Engineered features: exact description match, modality match, Jaccard token overlap, token intersection count, and date-gap features
+- Logistic Regression with `C=1.0`
+- Decision threshold: `0.46`
+
+Validation results:
+- Baseline validation accuracy: `0.8940`
+- Character n-gram model validation accuracy: `0.9000`
+- Best validation threshold: `0.46`
+- Public smoke-test accuracy: `96.53%`
+
+I also tested additional regularization tuning. A model with `C=0.5` and threshold `0.43` improved grouped validation accuracy to `0.9030`, but reduced the public smoke-test score from `96.53%` to `94.80%`. I selected the `C=1.0`, threshold `0.46` model as the final submission because it provided the best balance between validation performance and smoke-test stability.
