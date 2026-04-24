@@ -48,7 +48,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", default="data/relevant_priors_public.json")
     parser.add_argument("--out", default="models/relevant_priors_model.joblib")
-    parser.add_argument("--threshold", type=float, default=0.44)
+    parser.add_argument("--threshold", type=float, default=0.54)
     args = parser.parse_args()
 
     X, y, groups = load_public_json(args.data)
@@ -56,14 +56,14 @@ def main():
     splitter = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=0)
     train_idx, valid_idx = next(splitter.split(X, y, groups))
 
-    model = RelevantPriorsModel(threshold=args.threshold, C=2.0)
+    model = RelevantPriorsModel(threshold=args.threshold)
     model.fit(X.iloc[train_idx], y[train_idx])
     valid_pred = model.predict(X.iloc[valid_idx])
 
     print("Validation accuracy:", round(accuracy_score(y[valid_idx], valid_pred), 4))
     print("Confusion matrix:", confusion_matrix(y[valid_idx], valid_pred).tolist())
 
-    final_model = RelevantPriorsModel(threshold=args.threshold, C=2.0)
+    final_model = RelevantPriorsModel(threshold=args.threshold)
     final_model.fit(X, y)
 
     out = Path(args.out)
