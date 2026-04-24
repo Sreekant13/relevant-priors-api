@@ -83,3 +83,51 @@ Validation results:
 - Public smoke-test accuracy: `96.53%`
 
 I also tested additional regularization tuning. A model with `C=0.5` and threshold `0.43` improved grouped validation accuracy to `0.9030`, but reduced the public smoke-test score from `96.53%` to `94.80%`. I selected the `C=1.0`, threshold `0.46` model as the final submission because it provided the best balance between validation performance and smoke-test stability.
+
+## Body-Region Feature Experiment
+
+After the character n-gram experiment, I added rule-based body-region extraction from study descriptions. The motivation was that radiology relevance often depends not only on modality and text overlap, but also on whether the prior exam is anatomically comparable to the current exam.
+
+The body-region extractor maps study descriptions into broad regions such as:
+- Brain/head
+- Neck
+- Chest
+- Cardiac/vascular
+- Abdomen/pelvis
+- Spine
+- Breast
+- Upper extremity
+- Lower extremity
+- Whole body
+
+New engineered features included:
+- Same body region
+- Known same body region
+- Same modality and same body region
+
+This produced the largest validation improvement in the project.
+
+Results:
+- Word TF-IDF + engineered baseline: `0.8940` grouped validation accuracy
+- Word + character n-gram TF-IDF: `0.9000` grouped validation accuracy
+- Word + character n-gram TF-IDF + body-region features: `0.9402` grouped validation accuracy
+
+I also compared multiple logistic regression settings:
+
+| Model | Threshold | Validation Accuracy | Precision | Recall | F1 | Public Smoke Test |
+|---|---:|---:|---:|---:|---:|---:|
+| C=1.0 conservative | 0.54 | 0.9402 | 0.9397 | 0.8076 | 0.8687 | 97.11% |
+| C=2.0 higher-recall | 0.44 | 0.9402 | 0.8980 | 0.8527 | 0.8747 | 97.69% |
+
+The final candidate model was selected based on grouped validation accuracy, public smoke-test performance, and the balance between precision and recall. The C=2.0 / threshold=0.44 model had the strongest F1 and the best public smoke-test score, while tying for best validation accuracy.
+
+### Multi-Split Stability Check
+
+To reduce the risk of choosing a model that only performed well on one validation split, I evaluated the two strongest body-region models across five grouped random splits.
+
+| Model | Mean Accuracy | Std Accuracy | Mean Precision | Mean Recall | Mean F1 | Public Smoke Test |
+|---|---:|---:|---:|---:|---:|---:|
+| C=2.0, threshold=0.44 | 0.9281 | 0.0082 | 0.8833 | 0.8148 | 0.8475 | 97.69% |
+| C=1.0, threshold=0.54 | 0.9250 | 0.0105 | 0.9141 | 0.7662 | 0.8335 | 97.11% |
+
+The C=2.0 / threshold=0.44 model was selected because it had the stronger average accuracy and F1 across grouped validation splits, while also achieving the best public smoke-test score.
