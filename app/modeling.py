@@ -102,22 +102,45 @@ class RelevantPriorsModel:
 
     def __init__(self, threshold: float = 0.45, max_features: int = 10000, C: float = 1.0):
         self.threshold = threshold
-        self.vectorizer = TfidfVectorizer(
+
+        # Word n-grams capture exact phrase relationships such as:
+        # "MRI BRAIN", "CT HEAD", "WITHOUT CONTRAST".
+        self.word_vectorizer = TfidfVectorizer(
             lowercase=True,
+            analyzer="word",
             ngram_range=(1, 3),
             max_features=max_features,
             min_df=1,
         )
+
+        # Character n-grams improve robustness to abbreviations and misspellings:
+        # "CNTRST" vs "CONTRAST", "WO" vs "WITHOUT", "MR" vs "MRI".
+        self.char_vectorizer = TfidfVectorizer(
+            lowercase=True,
+            analyzer="char_wb",
+            ngram_range=(3, 5),
+            max_features=max_features,
+            min_df=1,
+        )
+
         self.classifier = LogisticRegression(max_iter=1000, C=C, solver="liblinear")
 
     def _features(self, X: pd.DataFrame, fit: bool = False):
         texts = pair_text(X)
+
         if fit:
-            text_features = self.vectorizer.fit_transform(texts)
+            word_features = self.word_vectorizer.fit_transform(texts)
+            char_features = self.char_vectorizer.fit_transform(texts)
         else:
-            text_features = self.vectorizer.transform(texts)
+            word_features = self.word_vectorizer.transform(texts)
+            char_features = self.char_vectorizer.transform(texts)
+
         numeric_features = sparse.csr_matrix(engineered_features(X))
-        return sparse.hstack([text_features, numeric_features], format="csr")
+
+        return sparse.hstack(
+            [word_features, char_features, numeric_features],
+            format="csr",
+        )
 
     def fit(self, X: pd.DataFrame, y: np.ndarray):
         features = self._features(X, fit=True)

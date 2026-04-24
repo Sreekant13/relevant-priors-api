@@ -48,7 +48,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", default="data/relevant_priors_public.json")
     parser.add_argument("--out", default="models/relevant_priors_model.joblib")
-    parser.add_argument("--threshold", type=float, default=0.45)
+    parser.add_argument("--threshold", type=float, default=0.46)
     args = parser.parse_args()
 
     X, y, groups = load_public_json(args.data)
