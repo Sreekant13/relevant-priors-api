@@ -45,6 +45,38 @@ def _modality_one(x: str) -> str:
 def _get_modality(s: pd.Series) -> np.ndarray:
     return np.array([_modality_one(x) for x in s])
 
+def _body_region_one(x: str) -> str:
+    x = (x or "").strip().upper()
+
+    region_patterns = [
+        ("BRAIN_HEAD", ["BRAIN", "HEAD", "SKULL", "ORBITS", "ORBIT", "FACE", "FACIAL", "SINUS", "SINUSES", "IAC"]),
+        ("NECK", ["NECK", "SOFT TISSUE NECK", "CERVICAL SOFT TISSUE"]),
+        ("CHEST", ["CHEST", "THORAX", "LUNG", "LUNGS", "RIB", "RIBS", "STERNUM"]),
+        ("CARDIAC", ["CARDIAC", "HEART", "CORONARY", "CTA CORONARY"]),
+        ("ABDOMEN", ["ABDOMEN", "ABD", "LIVER", "KIDNEY", "RENAL", "PANCREAS", "GALLBLADDER", "RUQ"]),
+        ("PELVIS", ["PELVIS", "PELVIC", "HIP", "HIPS", "SACRUM", "SI JOINT"]),
+        ("ABD_PELVIS", ["ABDOMEN PELVIS", "ABD PELVIS", "A/P", "KUB"]),
+        ("SPINE_C", ["C SPINE", "CERVICAL SPINE", "CERVICAL"]),
+        ("SPINE_T", ["T SPINE", "THORACIC SPINE", "THORACIC"]),
+        ("SPINE_L", ["L SPINE", "LUMBAR SPINE", "LUMBAR"]),
+        ("SPINE", ["SPINE", "MYELOGRAM"]),
+        ("BREAST", ["BREAST", "MAMMO", "MAMMOGRAM"]),
+        ("UPPER_EXT", ["SHOULDER", "HUMERUS", "ELBOW", "FOREARM", "WRIST", "HAND", "FINGER", "ARM"]),
+        ("LOWER_EXT", ["FEMUR", "KNEE", "TIBIA", "FIBULA", "ANKLE", "FOOT", "TOE", "LEG"]),
+        ("VASCULAR", ["ANGIO", "CTA", "MRA", "ARTERY", "ARTERIES", "VEIN", "VEINS", "VENOUS", "AORTA", "CAROTID"]),
+        ("WHOLE_BODY", ["WHOLE BODY", "BONE SCAN", "PET", "METASTATIC"]),
+    ]
+
+    for region, keywords in region_patterns:
+        for keyword in keywords:
+            if keyword in x:
+                return region
+
+    return "UNK"
+
+
+def _get_body_region(s: pd.Series) -> np.ndarray:
+    return np.array([_body_region_one(x) for x in s])
 
 def _jaccard(a: pd.Series, b: pd.Series) -> np.ndarray:
     out = []
@@ -81,10 +113,24 @@ def engineered_features(X: pd.DataFrame) -> np.ndarray:
     prior = _clean_series(X["prior_desc"])
     days = _days_between(X["current_date"], X["prior_date"])
 
+    current_modality = _get_modality(current)
+    prior_modality = _get_modality(prior)
+
+    current_region = _get_body_region(current)
+    prior_region = _get_body_region(prior)
+
+    same_modality = (current_modality == prior_modality).astype(float)
+    same_region = (current_region == prior_region).astype(float)
+    known_same_region = ((current_region != "UNK") & (current_region == prior_region)).astype(float)
+    same_modality_and_region = ((current_modality == prior_modality) & (current_region == prior_region)).astype(float)
+
     features = np.vstack(
         [
             (current == prior).astype(float).to_numpy(),
-            (_get_modality(current) == _get_modality(prior)).astype(float),
+            same_modality,
+            same_region,
+            known_same_region,
+            same_modality_and_region,
             _jaccard(current, prior),
             _intersection_count(current, prior),
             days / 3650.0,
