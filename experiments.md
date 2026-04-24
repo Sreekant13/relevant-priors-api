@@ -131,3 +131,29 @@ To reduce the risk of choosing a model that only performed well on one validatio
 | C=1.0, threshold=0.54 | 0.9250 | 0.0105 | 0.9141 | 0.7662 | 0.8335 | 97.11% |
 
 The C=2.0 / threshold=0.44 model was selected because it had the stronger average accuracy and F1 across grouped validation splits, while also achieving the best public smoke-test score.
+
+## Rank-Based Recency Feature Experiment
+
+After adding body-region features, I added case-level rank and recency features so the model could reason about each prior examination in the context of the full patient history, rather than treating each prior independently.
+
+New rank/recency features included:
+- Prior rank by recency within the case
+- Number of newer prior examinations
+- Whether the prior was the most recent prior overall
+- Whether the prior was the most recent prior with the same modality
+- Whether the prior was the most recent prior with the same body region
+- Whether the prior was the most recent prior with both same modality and same body region
+- Number of newer priors with the same modality
+- Number of newer priors with the same body region
+- Number of newer priors with both same modality and same body region
+
+This feature family was motivated by the observation that radiologists often prefer recent comparable priors, and that older priors may be less relevant when newer studies of the same anatomy or modality exist.
+
+Results:
+- Body-region model validation accuracy: `0.9402`
+- Body-region + rank/recency model validation accuracy: `0.9402`
+- Body-region + rank/recency model validation confusion matrix: `[[4379, 145], [213, 1253]]`
+- Best threshold after rank/recency features: `0.39`
+- Public smoke-test accuracy improved from `97.69%` to `98.27%`
+
+The final selected model uses word TF-IDF, character n-gram TF-IDF, engineered modality/body-region features, and case-level rank/recency features. I selected this version because it preserved grouped validation accuracy while improving recall/F1 balance and achieving the best public smoke-test score.
