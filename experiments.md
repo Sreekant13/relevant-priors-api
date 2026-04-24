@@ -25,7 +25,7 @@ The first baseline returned `false` for every prior examination. Because the dat
 
 ### Exact-match baseline
 
-The second baseline returned `true` only when the current and prior study descriptions exactly matched. This improved precision but missed many related studies with slightly different descriptions, abbreviations, or contrast/procedure wording.
+The second baseline returned `true` only when the current and prior study descriptions exactly matched. This improved precision but missed many related studies with slightly different descriptions, abbreviations, modality wording, or contrast wording.
 
 Examples of near-duplicate descriptions that exact matching may miss include:
 
@@ -36,7 +36,7 @@ Examples of near-duplicate descriptions that exact matching may miss include:
 
 ## Modeling Approach
 
-The final submission uses a deterministic scikit-learn Logistic Regression model. I chose this approach because it is fast, explainable, easy to deploy, and reliable under the challenge timeout constraints.
+The submission uses a deterministic scikit-learn Logistic Regression model. I chose this approach because it is fast, explainable, easy to deploy, and reliable under the challenge timeout constraints.
 
 The model uses a combination of text features and engineered clinical-style features.
 
@@ -97,11 +97,11 @@ Body-region features included:
 - known same body region
 - same modality and same body region
 
-This produced the largest validation improvement.
+This produced the largest validation improvement in the project.
 
 ### Rank and recency features
 
-Next, I added case-level rank and recency features so the model could reason about each prior in the context of the full patient history, rather than treating each prior independently.
+I then added case-level rank and recency features so the model could reason about each prior in the context of the full patient history, rather than treating each prior independently.
 
 Rank/recency features included:
 
@@ -119,7 +119,7 @@ This was motivated by the idea that radiologists often prefer recent comparable 
 
 ### Contrast and procedure compatibility features
 
-Finally, I added contrast/procedure compatibility features to capture differences such as:
+I also tested contrast/procedure compatibility features to capture differences such as:
 
 - `WITH CONTRAST`
 - `WITHOUT CONTRAST`
@@ -130,7 +130,7 @@ Finally, I added contrast/procedure compatibility features to capture difference
 - limited/screening exams
 - laterality, such as left/right/bilateral
 
-New features included:
+Tested features included:
 
 - same contrast status
 - known same contrast status
@@ -142,28 +142,28 @@ New features included:
 - same limited/screening status
 - same portable status
 
-These features improved grouped validation accuracy while preserving the best public smoke-test score.
+This experiment improved grouped validation accuracy, but it reduced the public smoke-test score compared with the rank/recency model. Because the challenge includes a public smoke test and final hidden scoring, I did not select this as the final submission model.
 
 ## Experiment Results
 
-| Experiment | Threshold | Validation Accuracy | Notes |
-|---|---:|---:|---|
-| Word TF-IDF + basic engineered features | 0.45 | 0.8940 | Initial logistic regression model |
-| Word + character TF-IDF | 0.46 | 0.9000 | Improved abbreviation robustness |
-| Body-region features | 0.44 / 0.54 tested | 0.9402 | Largest validation improvement |
-| Body-region + rank/recency features | 0.39 | 0.9402 | Preserved accuracy, improved smoke test |
-| Body-region + rank/recency + contrast/procedure features | 0.59 | 0.9434 | Final selected model |
+| Experiment | Threshold | Validation Accuracy | Public Smoke Test | Notes |
+|---|---:|---:|---:|---|
+| Word TF-IDF + basic engineered features | 0.45 | 0.8940 | 96.53% | Initial logistic regression model |
+| Word + character TF-IDF | 0.46 | 0.9000 | 96.53% | Improved abbreviation robustness |
+| Body-region features | 0.44 / 0.54 tested | 0.9402 | 97.69% | Largest validation improvement |
+| Body-region + rank/recency features | 0.39 | 0.9402 | 98.27% | Final selected model |
+| Body-region + rank/recency + contrast/procedure features | 0.59 | 0.9434 | 97.69% | Higher validation, lower smoke score |
 
 ## Body-Region Model Comparison
 
-I compared multiple logistic regression settings after adding body-region features.
+After adding body-region features, I compared multiple Logistic Regression settings.
 
 | Model | Threshold | Validation Accuracy | Precision | Recall | F1 | Public Smoke Test |
 |---|---:|---:|---:|---:|---:|---:|
 | C=1.0 conservative | 0.54 | 0.9402 | 0.9397 | 0.8076 | 0.8687 | 97.11% |
 | C=2.0 higher-recall | 0.44 | 0.9402 | 0.8980 | 0.8527 | 0.8747 | 97.69% |
 
-The C=2.0 / threshold=0.44 body-region model had the stronger F1 and better public smoke-test score at that stage.
+The C=2.0 / threshold=0.44 body-region model had stronger F1 and a better public smoke-test score at that stage.
 
 ## Multi-Split Stability Check
 
@@ -174,7 +174,7 @@ To reduce the risk of choosing a model that only worked on one validation split,
 | C=2.0, threshold=0.44 | 0.9281 | 0.0082 | 0.8833 | 0.8148 | 0.8475 | 97.69% |
 | C=1.0, threshold=0.54 | 0.9250 | 0.0105 | 0.9141 | 0.7662 | 0.8335 | 97.11% |
 
-The C=2.0 / threshold=0.44 body-region model was stronger across grouped validation splits. However, later rank/recency and contrast/procedure features improved the final model further.
+The C=2.0 / threshold=0.44 body-region model was stronger across grouped validation splits. Later, adding rank/recency features improved the public smoke-test result further.
 
 ## Rank and Recency Results
 
@@ -184,13 +184,15 @@ Results:
 
 - Previous body-region model validation accuracy: `0.9402`
 - Body-region + rank/recency validation accuracy: `0.9402`
-- Body-region + rank/recency confusion matrix: `[[4379, 145], [213, 1253]]`
+- Body-region + rank/recency validation confusion matrix: `[[4379, 145], [213, 1253]]`
 - Best threshold after rank/recency features: `0.39`
 - Public smoke-test accuracy improved from `97.69%` to `98.27%`
 
+This became the final selected model because it kept strong grouped validation accuracy while producing the best public smoke-test score observed during experimentation.
+
 ## Contrast and Procedure Results
 
-Adding contrast/procedure compatibility features improved validation accuracy while keeping the public smoke-test score stable.
+Adding contrast/procedure compatibility features improved validation accuracy, but reduced the public smoke-test score compared with the rank/recency model.
 
 Results:
 
@@ -201,7 +203,9 @@ Results:
 - Validation recall: `0.8097`
 - Validation F1: `0.8750`
 - Validation confusion matrix: `[[4464, 60], [279, 1187]]`
-- Public smoke-test accuracy remained `98.27%`
+- Public smoke-test accuracy: `97.69%`
+
+I treated this as a useful experiment, but did not select it as the final model because the validation improvement was modest and the public smoke-test score dropped from `98.27%` to `97.69%`.
 
 ## Final Selected Model
 
@@ -214,15 +218,15 @@ The final selected model uses:
 - Modality matching
 - Body-region matching
 - Case-level rank and recency features
-- Contrast/procedure/laterality compatibility features
-- Decision threshold: `0.59`
+- Decision threshold: `0.39`
+- Logistic Regression regularization: default `C=1.0`
 
-I selected this model because it achieved the best grouped validation accuracy while preserving the best public smoke-test score observed during experimentation.
+I selected this model because it achieved strong grouped validation accuracy and the best public smoke-test score observed during experimentation.
 
 Final observed metrics:
 
-- Grouped validation accuracy: `0.9434`
-- Validation confusion matrix: `[[4464, 60], [279, 1187]]`
+- Grouped validation accuracy: `0.9402`
+- Validation confusion matrix: `[[4379, 145], [213, 1253]]`
 - Public smoke-test accuracy: `98.27%`
 
 ## API Behavior
@@ -242,7 +246,7 @@ The strongest improvements came from adding domain-inspired features:
 1. Character n-grams improved robustness to abbreviations and spelling variations.
 2. Body-region extraction helped identify anatomically comparable priors.
 3. Rank and recency features helped model the importance of recent comparable studies.
-4. Contrast/procedure compatibility features improved validation accuracy by distinguishing exam variants such as CT vs CTA, with vs without contrast, and left/right laterality.
+4. Grouped validation by `case_id` helped avoid overestimating performance from leakage across prior exams from the same case.
 
 ## What Was Weaker
 
@@ -250,6 +254,7 @@ The strongest improvements came from adding domain-inspired features:
 - Exact-description-only rules had high precision but low recall.
 - Handwritten rules alone were brittle because radiology descriptions contain many abbreviations and near-duplicates.
 - Hyperparameter tuning alone produced only small gains compared with feature engineering.
+- Contrast/procedure compatibility improved validation accuracy but reduced the public smoke-test score, so it was not selected for the final model.
 
 ## Next Improvements
 
