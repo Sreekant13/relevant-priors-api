@@ -101,7 +101,29 @@ def _days_between(current_dates: pd.Series, prior_dates: pd.Series) -> np.ndarra
 
 
 def build_feature_frame(rows: List[Dict[str, Any]]) -> pd.DataFrame:
-    return pd.DataFrame(rows, columns=["current_desc", "prior_desc", "current_date", "prior_date"])
+    columns = [
+        "current_desc",
+        "prior_desc",
+        "current_date",
+        "prior_date",
+        "prior_rank_by_recency",
+        "newer_prior_count",
+        "is_most_recent_prior",
+        "is_most_recent_same_modality",
+        "is_most_recent_same_body_region",
+        "is_most_recent_same_modality_and_region",
+        "same_modality_newer_count",
+        "same_region_newer_count",
+        "same_modality_region_newer_count",
+    ]
+
+    df = pd.DataFrame(rows)
+
+    for col in columns:
+        if col not in df.columns:
+            df[col] = 0.0
+
+    return df[columns]
 
 
 def pair_text(X: pd.DataFrame) -> List[str]:
@@ -124,6 +146,17 @@ def engineered_features(X: pd.DataFrame) -> np.ndarray:
     known_same_region = ((current_region != "UNK") & (current_region == prior_region)).astype(float)
     same_modality_and_region = ((current_modality == prior_modality) & (current_region == prior_region)).astype(float)
 
+    # Case-level rank/recency features.
+    prior_rank_by_recency = X["prior_rank_by_recency"].fillna(0).astype(float).to_numpy()
+    newer_prior_count = X["newer_prior_count"].fillna(0).astype(float).to_numpy()
+    is_most_recent_prior = X["is_most_recent_prior"].fillna(0).astype(float).to_numpy()
+    is_most_recent_same_modality = X["is_most_recent_same_modality"].fillna(0).astype(float).to_numpy()
+    is_most_recent_same_body_region = X["is_most_recent_same_body_region"].fillna(0).astype(float).to_numpy()
+    is_most_recent_same_modality_and_region = X["is_most_recent_same_modality_and_region"].fillna(0).astype(float).to_numpy()
+    same_modality_newer_count = X["same_modality_newer_count"].fillna(0).astype(float).to_numpy()
+    same_region_newer_count = X["same_region_newer_count"].fillna(0).astype(float).to_numpy()
+    same_modality_region_newer_count = X["same_modality_region_newer_count"].fillna(0).astype(float).to_numpy()
+
     features = np.vstack(
         [
             (current == prior).astype(float).to_numpy(),
@@ -138,8 +171,22 @@ def engineered_features(X: pd.DataFrame) -> np.ndarray:
             (days <= 365).astype(float),
             (days <= 730).astype(float),
             (days <= 1095).astype(float),
+
+            # Normalized rank/count features.
+            prior_rank_by_recency / 100.0,
+            newer_prior_count / 100.0,
+            same_modality_newer_count / 100.0,
+            same_region_newer_count / 100.0,
+            same_modality_region_newer_count / 100.0,
+
+            # Binary recency flags.
+            is_most_recent_prior,
+            is_most_recent_same_modality,
+            is_most_recent_same_body_region,
+            is_most_recent_same_modality_and_region,
         ]
     ).T
+
     return features.astype(float)
 
 
@@ -201,22 +248,109 @@ class RelevantPriorsModel:
         return self.predict_proba(X) >= self.threshold
 
 
+def _safe_date_value(date_str: str):
+    parsed = pd.to_datetime(date_str, errors="coerce")
+    if pd.isna(parsed):
+        return pd.Timestamp.min
+    return parsed
+
+
 def cases_to_rows(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     rows = []
+
     for case in payload.get("cases", []):
         current = case.get("current_study", {}) or {}
         current_desc = current.get("study_description", "") or ""
         current_date = current.get("study_date", "") or ""
 
-        for prior in case.get("prior_studies", []) or []:
+        current_clean = re.sub(r"\s+", " ", re.sub(r"[^A-Z0-9 ]+", " ", current_desc.upper())).strip()
+        current_modality = _modality_one(current_clean)
+        current_region = _body_region_one(current_clean)
+
+        priors = case.get("prior_studies", []) or []
+
+        enriched_priors = []
+        for idx, prior in enumerate(priors):
+            prior_desc = prior.get("study_description", "") or ""
+            prior_clean = re.sub(r"\s+", " ", re.sub(r"[^A-Z0-9 ]+", " ", prior_desc.upper())).strip()
+            prior_date = prior.get("study_date", "") or ""
+
+            enriched_priors.append(
+                {
+                    "original_index": idx,
+                    "study": prior,
+                    "study_id": str(prior.get("study_id", "")),
+                    "prior_desc": prior_desc,
+                    "prior_date": prior_date,
+                    "prior_date_value": _safe_date_value(prior_date),
+                    "prior_modality": _modality_one(prior_clean),
+                    "prior_region": _body_region_one(prior_clean),
+                }
+            )
+
+        # Newest first.
+        sorted_priors = sorted(
+            enriched_priors,
+            key=lambda x: (x["prior_date_value"], x["study_id"]),
+            reverse=True,
+        )
+
+        rank_by_study_id = {}
+        for rank, item in enumerate(sorted_priors, start=1):
+            rank_by_study_id[item["study_id"]] = rank
+
+        for item in enriched_priors:
+            prior_date_value = item["prior_date_value"]
+
+            newer = [
+                p for p in enriched_priors
+                if p["prior_date_value"] > prior_date_value
+            ]
+
+            same_modality_newer = [
+                p for p in newer
+                if p["prior_modality"] == current_modality
+            ]
+
+            same_region_newer = [
+                p for p in newer
+                if current_region != "UNK" and p["prior_region"] == current_region
+            ]
+
+            same_modality_region_newer = [
+                p for p in newer
+                if (
+                    p["prior_modality"] == current_modality
+                    and current_region != "UNK"
+                    and p["prior_region"] == current_region
+                )
+            ]
+
+            is_same_modality = item["prior_modality"] == current_modality
+            is_same_region = current_region != "UNK" and item["prior_region"] == current_region
+            is_same_modality_region = is_same_modality and is_same_region
+
             rows.append(
                 {
                     "case_id": str(case.get("case_id", "")),
-                    "study_id": str(prior.get("study_id", "")),
+                    "study_id": item["study_id"],
                     "current_desc": current_desc,
-                    "prior_desc": prior.get("study_description", "") or "",
+                    "prior_desc": item["prior_desc"],
                     "current_date": current_date,
-                    "prior_date": prior.get("study_date", "") or "",
+                    "prior_date": item["prior_date"],
+
+                    "prior_rank_by_recency": rank_by_study_id.get(item["study_id"], 0),
+                    "newer_prior_count": len(newer),
+                    "is_most_recent_prior": 1.0 if len(newer) == 0 else 0.0,
+
+                    "is_most_recent_same_modality": 1.0 if is_same_modality and len(same_modality_newer) == 0 else 0.0,
+                    "is_most_recent_same_body_region": 1.0 if is_same_region and len(same_region_newer) == 0 else 0.0,
+                    "is_most_recent_same_modality_and_region": 1.0 if is_same_modality_region and len(same_modality_region_newer) == 0 else 0.0,
+
+                    "same_modality_newer_count": len(same_modality_newer),
+                    "same_region_newer_count": len(same_region_newer),
+                    "same_modality_region_newer_count": len(same_modality_region_newer),
                 }
             )
+
     return rows

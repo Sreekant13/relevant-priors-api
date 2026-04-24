@@ -6,7 +6,7 @@ import pandas as pd
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_score, recall_score, f1_score
 from sklearn.model_selection import GroupShuffleSplit
 
-from app.modeling import RelevantPriorsModel
+from app.modeling import RelevantPriorsModel, cases_to_rows
 
 
 def load_public_json(path: str):
@@ -18,31 +18,16 @@ def load_public_json(path: str):
         for item in data["truth"]
     }
 
-    rows = []
+    rows = cases_to_rows(data)
     labels = []
     groups = []
 
-    for case in data["cases"]:
-        current = case["current_study"]
-        case_id = str(case["case_id"])
-
-        for prior in case["prior_studies"]:
-            study_id = str(prior["study_id"])
-
-            rows.append(
-                {
-                    "current_desc": current.get("study_description", "") or "",
-                    "prior_desc": prior.get("study_description", "") or "",
-                    "current_date": current.get("study_date", "") or "",
-                    "prior_date": prior.get("study_date", "") or "",
-                }
-            )
-
-            labels.append(truth[(case_id, study_id)])
-            groups.append(case_id)
+    for row in rows:
+        key = (str(row["case_id"]), str(row["study_id"]))
+        labels.append(truth[key])
+        groups.append(str(row["case_id"]))
 
     return pd.DataFrame(rows), np.array(labels), np.array(groups)
-
 
 def main():
     X, y, groups = load_public_json("data/relevant_priors_public.json")
