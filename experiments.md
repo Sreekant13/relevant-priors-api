@@ -248,7 +248,7 @@ The strongest improvements came from adding domain-inspired features:
 3. Rank and recency features helped model the importance of recent comparable studies.
 4. Grouped validation by `case_id` helped avoid overestimating performance from leakage across prior exams from the same case.
 
-## What Was Weaker
+## What Was Weaker/Failed
 
 - The all-false baseline missed too many relevant priors.
 - Exact-description-only rules had high precision but low recall.
